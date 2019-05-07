@@ -1,0 +1,79 @@
+---
+title: "Assignment 10"
+author: "Joanna Pan"
+date: "8 October 2015"
+output: word_document
+---
+```{r, echo=FALSE, message=FALSE, warning=FALSE, error=FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(GGally)
+library(rpart)
+library(rpart.plot)
+
+choc <- read.csv("~./chocolates.csv", stringsAsFactors = FALSE)
+newchoc <- read.csv("~/chocolates-new.csv", stringsAsFactors = FALSE)
+
+choc$Type <- factor(choc$Type)
+choc.sub <- select(choc, Type:Protein)
+View(choc.sub)
+rownames(choc.sub) <- paste(choc$MFR, choc$Name, choc$Country)
+choc.rp <- rpart(Type~., data=choc.sub)
+predict(choc.rp, newchoc, type="class")
+
+prp(choc.rp)
+
+qplot(Fiber, CalFat, data=choc.sub, colour=Type) + 
+  geom_vline(xintercept=4.8256, colour="black") + 
+  geom_segment(aes(x=0, xend=4.8256, y=337.7, yend=337.7), colour="black") + 
+  theme(aspect.ratio=1, legend.position="bottom")
+table(choc.sub$Type, predict(choc.rp, choc.sub, type="class"))
+```
+
+
+```{r message=FALSE, error=FALSE, warning=FALSE, results='hide', fig.show='hide'}
+glm.fit <- glm(Type ~ ., data = choc.sub, family = binomial)
+summary(glm.fit)
+glm.probs <- predict (glm.fit, newchoc, type = "response")
+glm.pred <- rep("Dark", nrow(newchoc))
+glm.pred[glm.probs > .5] <- "Milk"
+glm.pred
+
+glm.act.probs <- predict (glm.fit, choc.sub, type = "response")
+glm.act.pred <- rep("Dark", nrow(choc.sub))
+glm.act.pred[glm.act.probs > .5] <- "Milk"
+
+table(choc.sub$Type, glm.act.pred)
+
+```
+
+
+```{r}
+choc.rp <- rpart(Type~., data=choc.sub)
+prp(choc.rp)
+
+qplot(Fiber, CalFat, data=choc.sub, colour=Type) + 
+  geom_vline(xintercept=4.8256, colour="black") + 
+  geom_segment(aes(x=0, xend=4.8256, y=337.7, yend=337.7), colour="black") + 
+  theme(aspect.ratio=1, legend.position="bottom")
+table(choc.sub$Type, predict(choc.rp, choc.sub, type="class"))
+
+chocnew<-chocolates.new
+  
+predict(choc.rp, chocnew, type="class")
+
+choc$Type <- factor(choc$Type)
+choc.sub <- select(choc, Type:Protein)
+rownames(choc.sub) <- paste(choc$MFR, choc$Name, choc$Country)
+choc.rp <- rpart(Type~., data=choc.sub)
+predict(choc.rp, newchoc, type="class")
+
+newchoc$predict <- predict(choc.rp, newchoc, type="class")
+
+
+``` 
+
+
+Two models were tried, the preferred model would be the tree model as it classified one more milk chocolate correctly than the linear discriminant analysis, glm, model.
