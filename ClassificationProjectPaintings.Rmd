@@ -1,0 +1,210 @@
+---
+output: html_document
+---
+# Can we tell what is in a painting by the colors of the pixels?
+
+The project for this course is to analyse the happy paintings by Bob Ross. This was the subject of the [538 post](http://fivethirtyeight.com/features/a-statistical-analysis-of-the-work-of-bob-ross/), "A Statistical Analysis of the Work of Bob Ross".
+
+We have taken the painting images from the [sales site](http://www.saleoilpaintings.com/paintings/bob-ross/bob-ross-sale-3_1.html), read the images into R, and resized them all to be 20 by 20 pixels. Each painting has been classified into one of 8 classes based on the title of the painting. This is the data that you will work with.
+
+It is provided in wide and long form. Long form is good for making pictures of the original painting, and the wide form is what you will need to use for fitting the classification models. In wide form, each row corresponds to one painting, and the rgb color values at each pixel are in each column. With a $20\times20$ image, this leads to $400\times3=1200$ columns.
+
+There are 241 paintings in the full data set. We have given you a training set of 178 paintings. Your job is to build the best classifier that you can with this training data, and use it to predict the data that we have not labelled. We have the classes for this test data, and can provide you with the error for your predictions.
+
+Here are three of the original paintings in the collection, labelled as "scene", "water", "flowers":
+
+![bobross5](../data/paintings/bobross5.jpg)
+![bobross41](../data/paintings/bobross140.jpg)
+![bobross140](../data/paintings/bobross167.jpg)
+
+Here is a quick look at the data produced from the paintings, and some code for making plots.
+
+## Wide form
+
+Wide form dimensions:
+
+```{r, message=FALSE, echo=TRUE, results='hold', fig.height=2, fig.width=2, fig.show='hold'}
+paintings <- read.csv("./data/paintings-train.csv", stringsAsFactors=FALSE)
+dim(paintings)
+```
+
+Number of paintings in each class:
+
+```{r, message=FALSE, echo=TRUE}
+table(paintings$class)
+```
+
+First few columns and rows:
+
+```{r, message=FALSE, echo=TRUE, results='hold', fig.height=2, fig.width=2, fig.show='hold'}
+options(digits=2)
+paintings[1:5, 1:11]
+```
+
+
+## Long form
+
+Long form dimensions:
+
+```{r, message=FALSE, echo=TRUE, results='hold', fig.height=2, fig.width=2, fig.show='hold'}
+paintings_long <- read.csv("./data/paintings-long-train.csv", stringsAsFactors=FALSE)
+dim(paintings_long)
+```
+
+First few rows:
+
+```{r, message=FALSE, echo=TRUE, results='hold', fig.height=2, fig.width=2, fig.show='hold'}
+head(paintings_long)
+```
+
+Plots of the long form data, for the same three paintings:
+
+```{r, message=FALSE, echo=TRUE}
+library(ggplot2)
+library(dplyr)
+library(randomForest)
+df <- filter(paintings_long, id == 2)
+qplot(x, -y, data=df, fill=h, geom="tile") + scale_fill_identity(labels=df$h) + theme_bw() +
+    theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks = element_blank())
+
+df <- filter(paintings_long, id == 41)
+qplot(x, -y, data=df, fill=h, geom="tile") + scale_fill_identity(labels=df$h) + theme_bw() +
+    theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks = element_blank())
+
+df <- filter(paintings_long, id == 241)
+qplot(x, -y, data=df, fill=h, geom="tile") + scale_fill_identity(labels=df$h) + theme_bw() +
+    theme(axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks = element_blank())
+
+
+
+paintings$class[paintings$id %in% c(2, 41, 241)]
+
+######
+
+plav <- summarise(group_by(paintings_long, id), r = mean(r), g = mean(g), b = mean(b))
+
+plav <- merge(plav, paintings[,1:3])
+
+qplot(class, r, data = plav, geom = "boxplot")
+qplot(class, b, data = plav, geom = "boxplot")
+qplot(class, g, data = plav, geom = "boxplot")
+
+
+library(tidyr)
+
+plavg <- gather(plav, key = channel, value = value, r:b)
+
+qplot(class, value, data = plavg, colour = channel, geom = "boxplot")
+
+
+paintings$class <- factor(paintings$class)
+
+t.wide <- read.csv("./data/paintings-test-unlabelled.csv")
+
+set.seed(1001)
+
+p.rf <- randomForest(class~., 
+                     data = paintings[,-c(1,2)], 
+                     importance = T)
+
+pred <- predict(p.rf, t.wide, type = "class")
+
+pred.df <- cbind.data.frame(t.wide$id, pred)
+colnames(pred.df) <- c("id", "class")
+
+write.table(pred.df,
+            file = "pred rf42.csv",
+            sep = ",",
+            qmethod = "double",
+            row.names = FALSE)
+
+```
+
+```{r}
+paint.test <- paintings[,-c(1,2,3)]
+pred.test <- predict(p.rf, paint.test, type = "class")
+
+pred.df <- cbind.data.frame(paint.test$id, pred.test)
+colnames(pred.df) <- c("id", "class")
+
+write.table(pred.df,
+            file = "pred rf42.csv",
+            sep = ",",
+            qmethod = "double",
+            row.names = FALSE)
+
+table(paintings$class, pred.test)
+```
+
+Logistic Regression:
+```{r}
+glm.fit <- glm(paintings$class ~ ., data = paintings[,-c(1,2)], family = binomial)
+
+glm.pred <- predict(glm.fit, t.wide, type = "response")
+glm.pred$class
+```
+
+LDA:
+```{r}
+lda.fit <- lda(paintings$class~ ., data = paintings[,-c(1,2)], family = binomial)
+lda.pred <- predict(lda.fit, t.wide, type = "class")
+
+pred.lda <- lda.pred$class
+
+pred.lda.df <- cbind.data.frame(t.wide$id, pred.lda)
+colnames(pred.lda.df) <- c("id", "class")
+
+write.table(pred.lda.df,
+            file = "pred lda1.csv",
+            sep = ",",
+            qmethod = "double",
+            row.names = FALSE)
+
+
+# score 0.31250
+```
+
+QDA
+```{r}
+qda.fit <- qda(paintings$class~ ., data = paintings[,-c(1,2)], family = binomial)
+# nope
+
+```
+
+
+## Tasks
+
+1. Provide some exploratory descriptive summaries of the data, that illustrate how the types of paintings differ, or are similar, and point out unusual paintings that don't fit their group.
+2. Create the most accurate classifier that you can for the data, as measured by the test data. This will require submitting your predictions to a specially created kaggle site.
+3. Write a 3--5 page report summarizing your approach to building the classifier, and your findings about the data.
+
+## Comments
+
+- The labels for the paintings have been automatically created from the painting names. It is possible that a painting might be better labelled as a different class.
+- It might be good to create new variables to help you build a better classifier; for example, the average of pixels in corners.
+- You will need to submit at least one entry to the kaggle site created for testing the classifier.
+
+## Deadlines:
+
+- Oct 14: Initial overview of data, summary statistics, plots that illustrate differences between types of paintings and unusual paintings.
+- Oct 21: At least one submission of predictions to kaggle. Instructions on how to do this will come later.
+- Nov 11: Final report due.
+
+## Grading:
+
+- Total points: 40
+- Accuracy of classifier: 10
+- Report: 22
+- Met deadlines: 8
